@@ -74,12 +74,13 @@ def create_app(test_config=None) -> Flask:
 
     app.secret_key = app.config['SECRET_KEY']
 
-    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'INFO'))
+    logging.basicConfig(level=app.config.get('LOG_LEVEL', 'DEBUG'))
 
     initialize_extensions(app)
     register_blueprints(app)
     register_commands(app)
 
+    logging.debug("start success ...")
     return app
 
 
@@ -238,4 +239,7 @@ def pool_stat():
 
 
 if __name__ == '__main__':
+    print("main ...")
+    with app.test_request_context():
+        print(app.url_map)
     app.run(host='0.0.0.0', port=5001)

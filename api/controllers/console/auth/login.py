@@ -9,6 +9,7 @@ from flask_restful import Resource, reqparse
 from libs.helper import email
 from libs.password import valid_password
 from services.account_service import AccountService, TenantService
+import logging
 
 
 class LoginApi(Resource):
@@ -16,6 +17,7 @@ class LoginApi(Resource):
 
     @setup_required
     def post(self):
+        logging.debug("start login ...")
         """Authenticate user and login."""
         parser = reqparse.RequestParser()
         parser.add_argument('email', type=email, required=True, location='json')

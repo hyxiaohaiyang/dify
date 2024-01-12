@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Flask (app.py)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/api/app.py",
+            "env": {
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1",
+                "GEVENT_SUPPORT": "True" // 添加这行来支持gevent
+            },
+            "args": [],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/api",
+            "justMyCode": false
+        }
+    ]
+}

@@ -14,7 +14,7 @@ class _CommonOpenAI:
         """
         credentials_kwargs = {
             "api_key": credentials['openai_api_key'],
-            "timeout": Timeout(315.0, read=300.0, write=10.0, connect=5.0),
+            "timeout": Timeout(3150.0, read=3000.0, write=100.0, connect=50.0),
             "max_retries": 1,
         }
 
