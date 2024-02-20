@@ -1,4 +1,5 @@
-from typing import IO, Generator, List, Optional, Union, cast
+from collections.abc import Generator
+from typing import IO, Optional, Union, cast
 
 from core.entities.provider_configuration import ProviderModelBundle
 from core.errors.error import ProviderTokenNotInitError
@@ -13,6 +14,7 @@ from core.model_runtime.model_providers.__base.moderation_model import Moderatio
 from core.model_runtime.model_providers.__base.rerank_model import RerankModel
 from core.model_runtime.model_providers.__base.speech2text_model import Speech2TextModel
 from core.model_runtime.model_providers.__base.text_embedding_model import TextEmbeddingModel
+from core.model_runtime.model_providers.__base.tts_model import TTSModel
 from core.provider_manager import ProviderManager
 
 
@@ -46,7 +48,7 @@ class ModelInstance:
         return credentials
 
     def invoke_llm(self, prompt_messages: list[PromptMessage], model_parameters: Optional[dict] = None,
-                   tools: Optional[list[PromptMessageTool]] = None, stop: Optional[List[str]] = None,
+                   tools: Optional[list[PromptMessageTool]] = None, stop: Optional[list[str]] = None,
                    stream: bool = True, user: Optional[str] = None, callbacks: list[Callback] = None) \
             -> Union[LLMResult, Generator]:
         """
@@ -62,7 +64,7 @@ class ModelInstance:
         :return: full response or stream response chunk generator result
         """
         if not isinstance(self.model_type_instance, LargeLanguageModel):
-            raise Exception(f"Model type instance is not LargeLanguageModel")
+            raise Exception("Model type instance is not LargeLanguageModel")
 
         self.model_type_instance = cast(LargeLanguageModel, self.model_type_instance)
         return self.model_type_instance.invoke(
@@ -87,7 +89,7 @@ class ModelInstance:
         :return: embeddings result
         """
         if not isinstance(self.model_type_instance, TextEmbeddingModel):
-            raise Exception(f"Model type instance is not TextEmbeddingModel")
+            raise Exception("Model type instance is not TextEmbeddingModel")
 
         self.model_type_instance = cast(TextEmbeddingModel, self.model_type_instance)
         return self.model_type_instance.invoke(
@@ -97,7 +99,8 @@ class ModelInstance:
             user=user
         )
 
-    def invoke_rerank(self, query: str, docs: list[str], score_threshold: Optional[float] = None, top_n: Optional[int] = None,
+    def invoke_rerank(self, query: str, docs: list[str], score_threshold: Optional[float] = None,
+                      top_n: Optional[int] = None,
                       user: Optional[str] = None) \
             -> RerankResult:
         """
@@ -111,7 +114,7 @@ class ModelInstance:
         :return: rerank result
         """
         if not isinstance(self.model_type_instance, RerankModel):
-            raise Exception(f"Model type instance is not RerankModel")
+            raise Exception("Model type instance is not RerankModel")
 
         self.model_type_instance = cast(RerankModel, self.model_type_instance)
         return self.model_type_instance.invoke(
@@ -134,7 +137,7 @@ class ModelInstance:
         :return: false if text is safe, true otherwise
         """
         if not isinstance(self.model_type_instance, ModerationModel):
-            raise Exception(f"Model type instance is not ModerationModel")
+            raise Exception("Model type instance is not ModerationModel")
 
         self.model_type_instance = cast(ModerationModel, self.model_type_instance)
         return self.model_type_instance.invoke(
@@ -144,7 +147,7 @@ class ModelInstance:
             user=user
         )
 
-    def invoke_speech2text(self, file: IO[bytes], user: Optional[str] = None, **params) \
+    def invoke_speech2text(self, file: IO[bytes], user: Optional[str] = None) \
             -> str:
         """
         Invoke large language model
@@ -154,15 +157,57 @@ class ModelInstance:
         :return: text for given audio file
         """
         if not isinstance(self.model_type_instance, Speech2TextModel):
-            raise Exception(f"Model type instance is not Speech2TextModel")
+            raise Exception("Model type instance is not Speech2TextModel")
 
         self.model_type_instance = cast(Speech2TextModel, self.model_type_instance)
         return self.model_type_instance.invoke(
             model=self.model,
             credentials=self.credentials,
             file=file,
+            user=user
+        )
+
+    def invoke_tts(self, content_text: str, tenant_id: str, voice: str, streaming: bool, user: Optional[str] = None) \
+            -> str:
+        """
+        Invoke large language tts model
+
+        :param content_text: text content to be translated
+        :param tenant_id: user tenant id
+        :param user: unique user id
+        :param voice: model timbre
+        :param streaming: output is streaming
+        :return: text for given audio file
+        """
+        if not isinstance(self.model_type_instance, TTSModel):
+            raise Exception("Model type instance is not TTSModel")
+
+        self.model_type_instance = cast(TTSModel, self.model_type_instance)
+        return self.model_type_instance.invoke(
+            model=self.model,
+            credentials=self.credentials,
+            content_text=content_text,
             user=user,
-            **params
+            tenant_id=tenant_id,
+            voice=voice,
+            streaming=streaming
+        )
+
+    def get_tts_voices(self, language: str) -> list:
+        """
+        Invoke large language tts model voices
+
+        :param language: tts language
+        :return: tts model voices
+        """
+        if not isinstance(self.model_type_instance, TTSModel):
+            raise Exception("Model type instance is not TTSModel")
+
+        self.model_type_instance = cast(TTSModel, self.model_type_instance)
+        return self.model_type_instance.get_tts_model_voices(
+            model=self.model,
+            credentials=self.credentials,
+            language=language
         )
 
 

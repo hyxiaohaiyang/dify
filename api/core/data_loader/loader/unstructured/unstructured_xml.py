@@ -1,9 +1,6 @@
 import logging
-import re
-from typing import List, Optional, Tuple, cast
 
 from langchain.document_loaders.base import BaseLoader
-from langchain.document_loaders.helpers import detect_file_encodings
 from langchain.schema import Document
 
 logger = logging.getLogger(__name__)
@@ -26,7 +23,7 @@ class UnstructuredXmlLoader(BaseLoader):
         self._file_path = file_path
         self._api_url = api_url
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         from unstructured.partition.xml import partition_xml
 
         elements = partition_xml(filename=self._file_path, xml_keep_tags=True, api_url=self._api_url)

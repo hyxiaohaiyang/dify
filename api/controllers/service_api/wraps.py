@@ -1,16 +1,16 @@
-# -*- coding:utf-8 -*-
 from datetime import datetime
 from functools import wraps
 
-from extensions.ext_database import db
 from flask import current_app, request
 from flask_login import user_logged_in
 from flask_restful import Resource
+from werkzeug.exceptions import NotFound, Unauthorized
+
+from extensions.ext_database import db
 from libs.login import _get_user
 from models.account import Account, Tenant, TenantAccountJoin
 from models.model import ApiToken, App
 from services.feature_service import FeatureService
-from werkzeug.exceptions import NotFound, Unauthorized
 
 
 def validate_app_token(view=None):
@@ -75,8 +75,8 @@ def validate_dataset_token(view=None):
             tenant_account_join = db.session.query(Tenant, TenantAccountJoin) \
                 .filter(Tenant.id == api_token.tenant_id) \
                 .filter(TenantAccountJoin.tenant_id == Tenant.id) \
-                .filter(TenantAccountJoin.role == 'owner') \
-                .one_or_none()
+                .filter(TenantAccountJoin.role.in_(['owner'])) \
+                .one_or_none() # TODO: only owner information is required, so only one is returned.
             if tenant_account_join:
                 tenant, ta = tenant_account_join
                 account = Account.query.filter_by(id=ta.account_id).first()
@@ -86,9 +86,9 @@ def validate_dataset_token(view=None):
                     current_app.login_manager._update_request_context_with_user(account)
                     user_logged_in.send(current_app._get_current_object(), user=_get_user())
                 else:
-                    raise Unauthorized("Tenant owner account is not exist.")
+                    raise Unauthorized("Tenant owner account does not exist.")
             else:
-                raise Unauthorized("Tenant is not exist.")
+                raise Unauthorized("Tenant does not exist.")
             return view(api_token.tenant_id, *args, **kwargs)
         return decorated
 

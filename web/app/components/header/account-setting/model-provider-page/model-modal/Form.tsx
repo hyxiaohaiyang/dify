@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { FC } from 'react'
+import cn from 'classnames'
 import { ValidatingTip } from '../../key-validator/ValidateStatus'
 import type {
   CredentialFormSchema,
+  CredentialFormSchemaNumberInput,
   CredentialFormSchemaRadio,
   CredentialFormSchemaSecretInput,
   CredentialFormSchemaSelect,
@@ -13,7 +15,8 @@ import { FormTypeEnum } from '../declarations'
 import { useLanguage } from '../hooks'
 import Input from './Input'
 import { SimpleSelect } from '@/app/components/base/select'
-
+import Tooltip from '@/app/components/base/tooltip-plus'
+import { HelpCircle } from '@/app/components/base/icons/src/vender/line/general'
 type FormProps = {
   value: FormValue
   onChange: (val: FormValue) => void
@@ -22,6 +25,10 @@ type FormProps = {
   validatedSuccess?: boolean
   showOnVariableMap: Record<string, string[]>
   isEditMode: boolean
+  readonly?: boolean
+  inputClassName?: string
+  isShowDefaultValue?: boolean
+  fieldMoreInfo?: (payload: CredentialFormSchema) => JSX.Element | null
 }
 
 const Form: FC<FormProps> = ({
@@ -32,6 +39,10 @@ const Form: FC<FormProps> = ({
   validatedSuccess,
   showOnVariableMap,
   isEditMode,
+  readonly,
+  inputClassName,
+  isShowDefaultValue = false,
+  fieldMoreInfo,
 }) => {
   const language = useLanguage()
   const [changeKey, setChangeKey] = useState('')
@@ -51,7 +62,19 @@ const Form: FC<FormProps> = ({
   }
 
   const renderField = (formSchema: CredentialFormSchema) => {
-    if (formSchema.type === FormTypeEnum.textInput || formSchema.type === FormTypeEnum.secretInput) {
+    const tooltip = formSchema.tooltip
+    const tooltipContent = (tooltip && (
+      <span className='ml-1 pt-1.5'>
+        <Tooltip popupContent={
+          // w-[100px] caused problem
+          <div className=''>
+            {tooltip[language]}
+          </div>
+        } >
+          <HelpCircle className='w-3 h-3  text-gray-500' />
+        </Tooltip>
+      </span>))
+    if (formSchema.type === FormTypeEnum.textInput || formSchema.type === FormTypeEnum.secretInput || formSchema.type === FormTypeEnum.textNumber) {
       const {
         variable,
         label,
@@ -63,8 +86,7 @@ const Form: FC<FormProps> = ({
       if (show_on.length && !show_on.every(showOnItem => value[showOnItem.variable] === showOnItem.value))
         return null
 
-      const disabed = isEditMode && (variable === '__model_type' || variable === '__model_name')
-
+      const disabed = readonly || (isEditMode && (variable === '__model_type' || variable === '__model_name'))
       return (
         <div key={variable} className='py-3'>
           <div className='py-2 text-sm text-gray-900'>
@@ -74,15 +96,19 @@ const Form: FC<FormProps> = ({
                 <span className='ml-1 text-red-500'>*</span>
               )
             }
+            {tooltipContent}
           </div>
           <Input
-            className={`${disabed && 'cursor-not-allowed opacity-60'}`}
-            value={value[variable] as string}
+            className={cn(inputClassName, `${disabed && 'cursor-not-allowed opacity-60'}`)}
+            value={(isShowDefaultValue && ((value[variable] as string) === '' || value[variable] === undefined || value[variable] === null)) ? formSchema.default : value[variable]}
             onChange={val => handleFormChange(variable, val)}
             validated={validatedSuccess}
             placeholder={placeholder?.[language]}
             disabled={disabed}
+            type={formSchema.type === FormTypeEnum.textNumber ? 'number' : 'text'}
+            {...(formSchema.type === FormTypeEnum.textNumber ? { min: (formSchema as CredentialFormSchemaNumberInput).min, max: (formSchema as CredentialFormSchemaNumberInput).max } : {})}
           />
+          {fieldMoreInfo?.(formSchema)}
           {validating && changeKey === variable && <ValidatingTip />}
         </div>
       )
@@ -111,6 +137,7 @@ const Form: FC<FormProps> = ({
                 <span className='ml-1 text-red-500'>*</span>
               )
             }
+            {tooltipContent}
           </div>
           <div className={`grid grid-cols-${options?.length} gap-3`}>
             {
@@ -138,6 +165,7 @@ const Form: FC<FormProps> = ({
               ))
             }
           </div>
+          {fieldMoreInfo?.(formSchema)}
           {validating && changeKey === variable && <ValidatingTip />}
         </div>
       )
@@ -160,14 +188,18 @@ const Form: FC<FormProps> = ({
         <div key={variable} className='py-3'>
           <div className='py-2 text-sm text-gray-900'>
             {label[language]}
+
             {
               required && (
                 <span className='ml-1 text-red-500'>*</span>
               )
             }
+            {tooltipContent}
           </div>
           <SimpleSelect
-            defaultValue={value[variable] as string}
+            className={cn(inputClassName)}
+            disabled={readonly}
+            defaultValue={(isShowDefaultValue && ((value[variable] as string) === '' || value[variable] === undefined || value[variable] === null)) ? formSchema.default : value[variable]}
             items={options.filter((option) => {
               if (option.show_on.length)
                 return option.show_on.every(showOnItem => value[showOnItem.variable] === showOnItem.value)
@@ -177,6 +209,7 @@ const Form: FC<FormProps> = ({
             onSelect={item => handleFormChange(variable, item.value as string)}
             placeholder={placeholder?.[language]}
           />
+          {fieldMoreInfo?.(formSchema)}
           {validating && changeKey === variable && <ValidatingTip />}
         </div>
       )

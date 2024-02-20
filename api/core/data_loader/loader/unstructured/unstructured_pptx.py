@@ -1,14 +1,9 @@
 import logging
-import re
-from typing import List, Optional, Tuple, cast
 
 from langchain.document_loaders.base import BaseLoader
-from langchain.document_loaders.helpers import detect_file_encodings
 from langchain.schema import Document
 
 logger = logging.getLogger(__name__)
-
-
 class UnstructuredPPTXLoader(BaseLoader):
     """Load msg files.
 
@@ -26,7 +21,7 @@ class UnstructuredPPTXLoader(BaseLoader):
         self._file_path = file_path
         self._api_url = api_url
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         from unstructured.partition.pptx import partition_pptx
 
         elements = partition_pptx(filename=self._file_path, api_url=self._api_url)

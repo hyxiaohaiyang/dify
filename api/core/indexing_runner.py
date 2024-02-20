@@ -5,7 +5,13 @@ import re
 import threading
 import time
 import uuid
-from typing import AbstractSet, Any, Collection, List, Literal, Optional, Type, Union, cast
+from typing import Optional, cast
+
+from flask import Flask, current_app
+from flask_login import current_user
+from langchain.schema import Document
+from langchain.text_splitter import TextSplitter
+from sqlalchemy.orm.exc import ObjectDeletedError
 
 from core.data_loader.file_extractor import FileExtractor
 from core.data_loader.loader.notion import NotionLoader
@@ -13,26 +19,19 @@ from core.docstore.dataset_docstore import DatasetDocumentStore
 from core.errors.error import ProviderTokenNotInitError
 from core.generator.llm_generator import LLMGenerator
 from core.index.index import IndexBuilder
-from core.model_manager import ModelManager, ModelInstance
+from core.model_manager import ModelInstance, ModelManager
 from core.model_runtime.entities.model_entities import ModelType, PriceType
 from core.model_runtime.model_providers.__base.large_language_model import LargeLanguageModel
 from core.model_runtime.model_providers.__base.text_embedding_model import TextEmbeddingModel
-from core.model_runtime.model_providers.__base.tokenizers.gpt2_tokenzier import GPT2Tokenizer
-from core.spiltter.fixed_text_splitter import EnhanceRecursiveCharacterTextSplitter, FixedRecursiveCharacterTextSplitter
+from core.splitter.fixed_text_splitter import EnhanceRecursiveCharacterTextSplitter, FixedRecursiveCharacterTextSplitter
 from extensions.ext_database import db
 from extensions.ext_redis import redis_client
 from extensions.ext_storage import storage
-from flask import Flask, current_app
-from flask_login import current_user
-from langchain.schema import Document
-from langchain.text_splitter import TS, TextSplitter, TokenTextSplitter
 from libs import helper
-from models.dataset import Dataset, DatasetProcessRule
+from models.dataset import Dataset, DatasetProcessRule, DocumentSegment
 from models.dataset import Document as DatasetDocument
-from models.dataset import DocumentSegment
 from models.model import UploadFile
 from models.source import DataSourceBinding
-from sqlalchemy.orm.exc import ObjectDeletedError
 
 
 class IndexingRunner:
@@ -41,7 +40,7 @@ class IndexingRunner:
         self.storage = storage
         self.model_manager = ModelManager()
 
-    def run(self, dataset_documents: List[DatasetDocument]):
+    def run(self, dataset_documents: list[DatasetDocument]):
         """Run the indexing process."""
         for dataset_document in dataset_documents:
             try:
@@ -239,7 +238,7 @@ class IndexingRunner:
             dataset_document.stopped_at = datetime.datetime.utcnow()
             db.session.commit()
 
-    def file_indexing_estimate(self, tenant_id: str, file_details: List[UploadFile], tmp_processing_rule: dict,
+    def file_indexing_estimate(self, tenant_id: str, file_details: list[UploadFile], tmp_processing_rule: dict,
                                doc_form: str = None, doc_language: str = 'English', dataset_id: str = None,
                                indexing_technique: str = 'economy') -> dict:
         """
@@ -274,6 +273,8 @@ class IndexingRunner:
         tokens = 0
         preview_texts = []
         total_segments = 0
+        total_price = 0
+        currency = 'USD'
         for file_detail in file_details:
 
             processing_rule = DatasetProcessRule(
@@ -344,11 +345,13 @@ class IndexingRunner:
                 price_type=PriceType.INPUT,
                 tokens=tokens
             )
+            total_price = '{:f}'.format(embedding_price_info.total_amount)
+            currency = embedding_price_info.currency
         return {
             "total_segments": total_segments,
             "tokens": tokens,
-            "total_price": '{:f}'.format(embedding_price_info.total_amount) if embedding_model_instance else 0,
-            "currency": embedding_price_info.currency if embedding_model_instance else 'USD',
+            "total_price": total_price,
+            "currency": currency,
             "preview": preview_texts
         }
 
@@ -388,6 +391,8 @@ class IndexingRunner:
         tokens = 0
         preview_texts = []
         total_segments = 0
+        total_price = 0
+        currency = 'USD'
         for notion_info in notion_info_list:
             workspace_id = notion_info['workspace_id']
             data_source_binding = DataSourceBinding.query.filter(
@@ -470,24 +475,26 @@ class IndexingRunner:
                     "qa_preview": document_qa_list,
                     "preview": preview_texts
                 }
-
-        embedding_model_type_instance = embedding_model_instance.model_type_instance
-        embedding_model_type_instance = cast(TextEmbeddingModel, embedding_model_type_instance)
-        embedding_price_info = embedding_model_type_instance.get_price(
-            model=embedding_model_instance.model,
-            credentials=embedding_model_instance.credentials,
-            price_type=PriceType.INPUT,
-            tokens=tokens
-        )
+        if embedding_model_instance:
+            embedding_model_type_instance = embedding_model_instance.model_type_instance
+            embedding_model_type_instance = cast(TextEmbeddingModel, embedding_model_type_instance)
+            embedding_price_info = embedding_model_type_instance.get_price(
+                model=embedding_model_instance.model,
+                credentials=embedding_model_instance.credentials,
+                price_type=PriceType.INPUT,
+                tokens=tokens
+            )
+            total_price = '{:f}'.format(embedding_price_info.total_amount)
+            currency = embedding_price_info.currency
         return {
             "total_segments": total_segments,
             "tokens": tokens,
-            "total_price": '{:f}'.format(embedding_price_info.total_amount) if embedding_model_instance else 0,
-            "currency": embedding_price_info.currency if embedding_model_instance else 'USD',
+            "total_price": total_price,
+            "currency": currency,
             "preview": preview_texts
         }
 
-    def _load_data(self, dataset_document: DatasetDocument, automatic: bool = False) -> List[Document]:
+    def _load_data(self, dataset_document: DatasetDocument, automatic: bool = False) -> list[Document]:
         # load file
         if dataset_document.data_source_type not in ["upload_file", "notion_import"]:
             return []
@@ -519,7 +526,7 @@ class IndexingRunner:
         )
 
         # replace doc id to document model id
-        text_docs = cast(List[Document], text_docs)
+        text_docs = cast(list[Document], text_docs)
         for text_doc in text_docs:
             # remove invalid symbol
             text_doc.page_content = self.filter_string(text_doc.page_content)
@@ -531,7 +538,9 @@ class IndexingRunner:
     def filter_string(self, text):
         text = re.sub(r'<\|', '<', text)
         text = re.sub(r'\|>', '>', text)
-        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x80-\xFF]', '', text)
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\xEF\xBF\xBE]', '', text)
+        # Unicode  U+FFFE
+        text = re.sub('\uFFFE', '', text)
         return text
 
     def _get_splitter(self, processing_rule: DatasetProcessRule,
@@ -552,7 +561,7 @@ class IndexingRunner:
 
             character_splitter = FixedRecursiveCharacterTextSplitter.from_encoder(
                 chunk_size=segmentation["max_tokens"],
-                chunk_overlap=0,
+                chunk_overlap=segmentation.get('chunk_overlap', 0),
                 fixed_separator=separator,
                 separators=["\n\n", "。", ".", " ", ""],
                 embedding_model_instance=embedding_model_instance
@@ -561,16 +570,16 @@ class IndexingRunner:
             # Automatic segmentation
             character_splitter = EnhanceRecursiveCharacterTextSplitter.from_encoder(
                 chunk_size=DatasetProcessRule.AUTOMATIC_RULES['segmentation']['max_tokens'],
-                chunk_overlap=0,
+                chunk_overlap=DatasetProcessRule.AUTOMATIC_RULES['segmentation']['chunk_overlap'],
                 separators=["\n\n", "。", ".", " ", ""],
                 embedding_model_instance=embedding_model_instance
             )
 
         return character_splitter
 
-    def _step_split(self, text_docs: List[Document], splitter: TextSplitter,
+    def _step_split(self, text_docs: list[Document], splitter: TextSplitter,
                     dataset: Dataset, dataset_document: DatasetDocument, processing_rule: DatasetProcessRule) \
-            -> List[Document]:
+            -> list[Document]:
         """
         Split the text documents into documents and save them to the document segment.
         """
@@ -615,9 +624,9 @@ class IndexingRunner:
 
         return documents
 
-    def _split_to_documents(self, text_docs: List[Document], splitter: TextSplitter,
+    def _split_to_documents(self, text_docs: list[Document], splitter: TextSplitter,
                             processing_rule: DatasetProcessRule, tenant_id: str,
-                            document_form: str, document_language: str) -> List[Document]:
+                            document_form: str, document_language: str) -> list[Document]:
         """
         Split the text documents into nodes.
         """
@@ -645,7 +654,9 @@ class IndexingRunner:
                     else:
                         page_content = page_content
                     document_node.page_content = page_content
-                    split_documents.append(document_node)
+
+                    if document_node.page_content:
+                        split_documents.append(document_node)
             all_documents.extend(split_documents)
         # processing qa document
         if document_form == 'qa_model':
@@ -688,8 +699,8 @@ class IndexingRunner:
 
             all_qa_documents.extend(format_documents)
 
-    def _split_to_documents_for_estimate(self, text_docs: List[Document], splitter: TextSplitter,
-                                         processing_rule: DatasetProcessRule) -> List[Document]:
+    def _split_to_documents_for_estimate(self, text_docs: list[Document], splitter: TextSplitter,
+                                         processing_rule: DatasetProcessRule) -> list[Document]:
         """
         Split the text documents into nodes.
         """
@@ -759,7 +770,7 @@ class IndexingRunner:
             for q, a in matches if q and a
         ]
 
-    def _build_index(self, dataset: Dataset, dataset_document: DatasetDocument, documents: List[Document]) -> None:
+    def _build_index(self, dataset: Dataset, dataset_document: DatasetDocument, documents: list[Document]) -> None:
         """
         Build the index for the document.
         """
@@ -866,7 +877,7 @@ class IndexingRunner:
         DocumentSegment.query.filter_by(document_id=dataset_document_id).update(update_params)
         db.session.commit()
 
-    def batch_add_segments(self, segments: List[DocumentSegment], dataset: Dataset):
+    def batch_add_segments(self, segments: list[DocumentSegment], dataset: Dataset):
         """
         Batch add segments index processing
         """

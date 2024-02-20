@@ -1,22 +1,27 @@
-from hashlib import md5
+from collections.abc import Generator
 from json import dumps, loads
-from time import time
-from typing import Any, Dict, Generator, List, Union
+from typing import Any, Union
 
-from core.model_runtime.model_providers.minimax.llm.errors import (BadRequestError, InsufficientAccountBalanceError,
-                                                                   InternalServerError, InvalidAPIKeyError,
-                                                                   InvalidAuthenticationError, RateLimitReachedError)
-from core.model_runtime.model_providers.minimax.llm.types import MinimaxMessage
 from requests import Response, post
 
+from core.model_runtime.model_providers.minimax.llm.errors import (
+    BadRequestError,
+    InsufficientAccountBalanceError,
+    InternalServerError,
+    InvalidAPIKeyError,
+    InvalidAuthenticationError,
+    RateLimitReachedError,
+)
+from core.model_runtime.model_providers.minimax.llm.types import MinimaxMessage
 
-class MinimaxChatCompletion(object):
+
+class MinimaxChatCompletion:
     """
         Minimax Chat Completion API
     """
     def generate(self, model: str, api_key: str, group_id: str, 
-                 prompt_messages: List[MinimaxMessage], model_parameters: dict,
-                 tools: Dict[str, Any], stop: List[str] | None, stream: bool, user: str) \
+                 prompt_messages: list[MinimaxMessage], model_parameters: dict,
+                 tools: list[dict[str, Any]], stop: list[str] | None, stream: bool, user: str) \
         -> Union[MinimaxMessage, Generator[MinimaxMessage, None, None]]:
         """
             generate chat completion
@@ -78,7 +83,7 @@ class MinimaxChatCompletion(object):
 
         try:
             response = post(
-                url=url, data=dumps(body), headers=headers, stream=stream, timeout=10)
+                url=url, data=dumps(body), headers=headers, stream=stream, timeout=(10, 300))
         except Exception as e:
             raise InternalServerError(e)
         
@@ -162,7 +167,6 @@ class MinimaxChatCompletion(object):
                 continue
 
             for choice in choices:
-                print(choice)
                 message = choice['delta']
                 yield MinimaxMessage(
                     content=message,
