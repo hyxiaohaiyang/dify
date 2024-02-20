@@ -1,3 +1,5 @@
+import logging
+
 import flask_login
 from flask import current_app, request
 from flask_restful import Resource, reqparse
@@ -8,7 +10,6 @@ from controllers.console.setup import setup_required
 from libs.helper import email
 from libs.password import valid_password
 from services.account_service import AccountService, TenantService
-import logging
 
 
 class LoginApi(Resource):
